@@ -1,3 +1,8 @@
+"""
+Created by: bartdavids: https://github.com/bartdavids/ML/
+
+"""
+
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
