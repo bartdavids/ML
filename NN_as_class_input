@@ -1,0 +1,58 @@
+# -*- coding: utf-8 -*-
+"""
+Created by: bartdavids: https://github.com/bartdavids/ML/
+
+"""
+from NN_as_class import NN
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+#%% Get MNIST dataset
+with np.load("data/mnist.npz") as f:
+    i, labels = f["x_train"], f["y_train"]
+
+# scale to - to 1
+i = i.astype("float64")
+i /= 255
+
+i[i<0.5] = 0 #for fun, to see if it mattered when the in put is one-hot
+i[i>=0.5] = 1
+
+# The images are now in columns and rows (shape = 60000, 28, 28), just 1 vector is needed per image (shape = 60000, 784)
+i = np.reshape(i, (i.shape[0], i.shape[1] * i.shape[2]))
+
+# Convert labels to categrories
+labels = np.eye(10)[labels]
+
+#%% Initiate training of the neural network
+# Hidden layers in list: every number is the amnount neurons in that layer. 
+# So [10, 10] means that there are going to be two layers with 10 neurons each
+hidden = [20]
+
+epochs = 5
+learning_rate = 0.01
+
+nn = NN(i, labels,
+        epochs = epochs,
+        hidden = hidden,
+        learning_rate = learning_rate,
+        optimizer = 'adam', # available: adam, gradient descent
+        activation = 'sigmoid', #available: sigmoid, tanh, relu (causes overflow in matmul)
+        loss = 'mean squared error') #available: means squared error, mean absolute error
+
+nn.Train()
+#%%
+plt.plot(list(range(1, epochs+1)), nn.history)
+plt.title('model loss')
+plt.ylabel('loss')
+plt.xlabel('epoch')
+
+test_label = 999
+test = np.argmax(nn.Predict(i[test_label]))
+actual = np.argmax(nn.Predict(i[test_label]))
+if test == actual:
+    print(f'Yay! The model predicted correctly: {test}')
+else:
+    print("Aw... The model predicted: {test}, but it was actually a {actual}")
+
