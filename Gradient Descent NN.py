@@ -1,6 +1,6 @@
-from data import get_mnist
 import sys
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 """
@@ -30,20 +30,22 @@ labels = np.eye(10)[labels]
 #%% Initiate neural network
 # Hidden layers in list: every number is the amnount neurons in that layer. 
 # So [10, 10] means that there are going to be two layers with 10 neurons each
-hidden = [10, 10]
+hidden = [20]
 
 # neurons = n
 n = [len(i[0])] + hidden + [len(labels[0])]
 
-# initialize weights (w) and biases (b)
+# initialize weights (w) between -0.5 and 0.5 and biases (b) as 0
 w = [np.random.uniform(-0.5, 0.5, (n[h+1], n[h])) for h in range(len(n)-1)]
 b = [np.zeros((n[h + 1], 1)) for h in range(len(n)-1)] 
 
 # Set hyperparameters
 learn_rate = 0.01
-epochs = 3
+
+epochs = 5
 
 #%% define some functions
+# Activation functions and their derivatives
 def sigmoid(r_pre):
     # sigmoid activation function
     return 1 / (1 + np.exp(-r_pre))
@@ -64,8 +66,15 @@ def der_relu(r):
     der_r[der_r>0] = 1
     return der_r
 
+def tanh(r):
+    return ((np.exp(r) - np.exp(-r))/(np.exp(r) + np.exp(-r)))
+
+def der_tanh(r):
+    return 1 - ((np.exp(r) - np.exp(-r))**2) / ((np.exp(r) - np.exp(-r))**2)
+
+# Cost functions and their derivatives
 def mse(y, r):
-    return 1 / (2 * len(r)) * np.sum((r - l) ** 2, axis=0)
+    return 1 / (2 * len(r)) * np.sum((y - r) ** 2, axis=0)
 
 def der_mse(y, r):
     return 1*(y - r)
@@ -77,18 +86,82 @@ def der_mae(y, r):
     e = y-r
     e[e<0] = -1
     e[e>0] = 1
-    # e[e==0] = 0 This is not necesary
     return e
 
-def tanh(r):
-    return ((np.exp(r) - np.exp(-r))/(np.exp(r) + np.exp(-r)))
+# Backpropogation algorithms
+def GradientDescent(r, l, w, b, learn_rate = 0.01):
+    # Backpropagation output -> hidden (cost function derivative)
+    grad = list(range(len(w))) # list of gradients for eacht activated neuron (so all except input)
+    
+    grad_o = der_loss(r[-1], l) # derrivative of the cost function for gradiënt descent
+    grad[-1] = grad_o
+    
+    # adjust weights and biases
+    w[-1] += -learn_rate * grad_o @ r[-2].T
+    b[-1] += -learn_rate * grad_o
+    
+    
+     # Backpropagation hidden layers (activation function derivative)
+    for hli in list(range(len(w)-1))[::-1]: # for all the connections beteen the hidden layers, in reverse
+        
+        grad_h = w[hli + 1].T @ grad[hli + 1] * derivitive_activation(r[hli + 1])
+        grad[hli] = grad_h
+        
+        # update weights
+        w[hli] += -learn_rate * grad_h @ r[hli].T
+        b[hli] += -learn_rate * grad_h
+    return w, b
 
-def der_tanh(r):
-    return 1 - ((np.exp(r) - np.exp(-r))**2) / ((np.exp(r) - np.exp(-r))**2)
+def Adam(r, l, w, b, learn_rate = 0.01, beta1 = 0.8, beta2 = 0.999, eps = 1e-8):
+    # Backpropagation output -> hidden (cost function derivative)
+    grad = list(range(len(w))) # list of gradients for eacht activated neuron (so all except input)
+    
+    grad_o = der_loss(r[-1], l) # derrivative of the cost function for gradiënt descent
+    grad[-1] = grad_o
+    
+    # update momentum
+    m1[-1] = beta1 * m1[-1] + (1.0 - beta1) * grad_o @ r[-2].T
+    m2[-1] = beta2 * m2[-1] + (1.0 - beta2) * (grad_o**2 @ r[-2].T)
+    bm1[-1] = beta1 * bm1[-1] + (1.0 - beta1) * grad_o
+    bm2[-1] = beta2 * bm2[-1] + (1.0 - beta2) * grad_o**2
+    
+    # Bias correction
+    m1hat = m1[-1] / (1. - beta1**(epoch + 1))
+    m2hat = m2[-1] / (1. - beta2**(epoch + 1))
+    bm1hat = bm1[-1] / (1. - beta1**(epoch + 1))
+    bm2hat = bm2[-1] / (1. - beta2**(epoch + 1))
+    
+    # Update variable value            
+    w[-1] += -learn_rate * m1hat/(np.sqrt(m2hat) + eps) 
+    b[-1] += -learn_rate * bm1hat/(np.sqrt(bm2hat) + eps)
+    
+     # Backpropagation hidden layers (activation function derivative)
+    for hli in list(range(len(w)-1))[::-1]: # for all the connections beteen the hidden layers, in reverse
+        
+        grad_h = w[hli + 1].T @ grad[hli + 1] * derivitive_activation(r[hli + 1])
+        grad[hli] = grad_h
+        
+        # update momentum
+        m1[hli] = beta1 * m1[hli] + (1.0 - beta1) * grad_h @ r[hli].T
+        m2[hli] = beta2 * m2[hli] + (1.0 - beta2) * (grad_h**2 @ r[hli].T)
+        bm1[hli] = beta1 * bm1[hli] + (1.0 - beta1) * grad_h 
+        bm2[hli] = beta2 * bm2[hli] + (1.0 - beta2) * grad_h**2
+        
+        # Bias correction
+        m1hat = m1[hli] / (1. - beta1**(epoch + 1))
+        m2hat = m2[hli] / (1. - beta2**(epoch + 1))
+        bm1hat = bm1[hli] / (1. - beta1**(epoch + 1))
+        bm2hat = bm2[hli] / (1. - beta2**(epoch + 1))
+        
+        #update weights
+        w[hli] += -learn_rate * m1hat/(np.sqrt(m2hat) + eps)
+        b[hli] += -learn_rate * bm1hat/(np.sqrt(bm2hat) + eps)
+    return w, b
 
 #%% assign the functions to the activation and loss function
 activation = 'sigmoid'
 loss = 'mean squared error'
+optimizer = 'adam'
 
 if activation == 'sigmoid':
     activation = sigmoid
@@ -110,8 +183,20 @@ elif loss == 'mean absolute error' or loss == 'mae':
     der_loss = der_mae
 else:
     raise(Exception(f"The loss function {loss} is not available"))
+    
+if optimizer == 'gradient descent':
+    optimizer = GradientDescent
+elif optimizer == 'adam':
+    optimizer = Adam
+    
+    # Initialize mmomentii m1 and m2 for weights, mb1, mb2 for the biases
+    m1 = [np.zeros(x.shape) for x in w]
+    m2 = [np.zeros(x.shape) for x in w]
+    bm1 = [np.zeros(x.shape) for x in b]
+    bm2 = [np.zeros(x.shape) for x in b]
 
 #%% Train
+corr = [] # store the improvement over epochs
 for epoch in range(epochs):
     correct = 0
     for img, l in zip(i, labels):
@@ -128,32 +213,17 @@ for epoch in range(epochs):
             r.append(activation(r_pre)) # activation (normalisation with the sigmoid function), between hidden and input
 
         correct += int(np.argmax(r[-1]) == np.argmax(l)) #The highest number is chosen, "correct" is only to determine the amount of correct outcomes per epoch
-
-        # Backpropagation output -> hidden (cost function derivative)
-        grad = list(range(len(w))) # list of gradients for eacht activated neuron (so all except input)
-        
-        grad_o = der_loss(r[-1], l) # derrivative of the cost function for gradiënt descent
-        grad[-1] = grad_o
-        
-        # adjust weights and biases
-        w[-1] += -learn_rate * grad_o @ r[-2].T
-        b[-1] += -learn_rate * grad_o
-        
-        
-         # Backpropagation hidden layers (activation function derivative)
-        for hli in list(range(len(w)-1))[::-1]: # for all the connections beteen the hidden layers, in reverse
-            
-            grad_h = w[hli + 1].T @ grad[hli + 1] * derivitive_activation(r[hli + 1])
-            grad[hli] = grad_h
-            
-            # update weights
-            w[hli] += -learn_rate * grad_h @ r[hli].T
-            b[hli] += -learn_rate * grad_h
+        w, b = optimizer(r, l, w, b, learn_rate = learn_rate)   
 
     # Show accuracy for this epoch
     # percentage correct:
-    cor = round((correct / i.shape[0]) * 100)
+    cor = round((correct / i.shape[0]) * 100, 2)
+    corr.append(cor)
     print(f"Epoch {epoch+1}: Accuracy = {cor}%")
+plt.plot(list(range(1, epochs+1)), corr)
+plt.title('model loss')
+plt.ylabel('loss')
+plt.xlabel('epoch')
 
 #%% Compare
 
@@ -180,5 +250,5 @@ if actual_result == network_result:
     print("That's correct!")
 else:
     print("Need more pushups")
-print()
+
 
