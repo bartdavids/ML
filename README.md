@@ -8,19 +8,20 @@ The data map stores practice data (MNIST only for now)
 
 NN
 - .py file where a simple neural network can be build, trained and run
-- for those that like to read top-down
-- ReLu blows out in matmul (@) when using GD (not when using adam)
+- for those that like to read top-down in python
+- ReLu/leaky ReLu blow out in matmul (@) when using GD (not when using adam)
 
 NN_as_class
 - .py file containing the neural network builder and trainer as a class
-- Exaple use in NN_as_class_input
+- Example use in NN_as_class_input
 
 NN_as_class_input
 - Example use of the NN_as_class file
 
 # Known issues
-- ReLu/linear activation functions causes matmul to create inf's (and consequently NaNs) when using gradient descent (not when using ADAM)
+- ReLu/linear activation functions causes matmul to create inf's (and consequently NaNs)
 
 # Things I like to add
-- Batch training
-- Better tracking of performace
+- Better tracking of performace (metrics)
+- Different type of initization of weights
+- Test-train split the data
