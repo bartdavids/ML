@@ -3,7 +3,7 @@
 Created by: bartdavids: https://github.com/bartdavids/ML/
 
 """
-from NN_as_class import NN
+from NN_class import NN
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -11,48 +11,73 @@ import matplotlib.pyplot as plt
 #%% Get MNIST dataset
 with np.load("data/mnist.npz") as f:
     i, labels = f["x_train"], f["y_train"]
+# i is the inpu data, l is the labels
 
-# scale to - to 1
+# scale to from 0 to 1
 i = i.astype("float64")
 i /= 255
 
-i[i<0.5] = 0 #for fun, to see if it mattered when the in put is one-hot
+# for fun, to see if it mattered when the in put is 0 or 1 (one-hot), remove this block to compare
+# Spoiler alert: only slightly worse
+i[i<0.5] = 0 
 i[i>=0.5] = 1
 
 # The images are now in columns and rows (shape = 60000, 28, 28), just 1 vector is needed per image (shape = 60000, 784)
+# The shape of the data is cast in a n x m shape, where n is the amount of samples and m a vector of the data
 i = np.reshape(i, (i.shape[0], i.shape[1] * i.shape[2]))
 
-# Convert labels to categrories
+i.shape += (1,) 
+# now the input (i) is a 3D numpy array with the shape (n, m, 1) where n is the amount of samples,
+# m is the amount of parameters and the 1 makes the vectors an m x 1 matrix, which is needed during training
+
+# Convert labels to categrories containing 10 0 or 1 (one-hot) categories for the options of numbers
 labels = np.eye(10)[labels]
+labels.shape += (1,)
+# now the output (i) is a 3D numpy array with the shape (n, m, 1) where n is the amount of samples,
+# m is the amount of categories and the 1 makes the vectors an m x 1 matrix, which is needed during training
 
-#%% Initiate training of the neural network
+
+#%% Initiate the neural network
 # Hidden layers in list: every number is the amnount neurons in that layer. 
-# So [10, 10] means that there are going to be two layers with 10 neurons each
-hidden = [20]
+# So [25, 20] means that there are going to be two hidden layers with the first containing 25 neurons, and the second 20
+hidden = [25, 20]
 
-epochs = 5
-learning_rate = 0.01
+learning_rate = 0.05 # the learning rate
+
+# the amount of batches, not the batch size: 
+# 1 is batch mode, where batch_amount == sample size its stochastic 
+# and anywhere in between is mini-batch
+batch_amount = 60000 # stochastich in example because of better training 
 
 nn = NN(i, labels,
-        epochs = epochs,
         hidden = hidden,
+        batch_amount = batch_amount, 
         learning_rate = learning_rate,
-        optimizer = 'adam', # available: adam, gradient descent
-        activation = 'sigmoid', #available: sigmoid, tanh, relu (causes overflow in matmul)
-        loss = 'mean squared error') #available: means squared error, mean absolute error
+        optimizer = 'adam',          # available: adam, gradient descent
+        activation = 'sigmoid',      #available: sigmoid, tanh (relu and leaky relu cause overflow in matmul)
+        loss = 'mean squared error') #available: means squared error, mean absolute error, logcosh and huber
 
-nn.Train()
-#%%
-plt.plot(list(range(1, epochs+1)), nn.history)
-plt.title('model loss')
-plt.ylabel('loss')
+#%% Initial training
+epochs = 10
+nn.Train(training_epochs = epochs)
+
+#%% Some more training
+# This is not actually going to improve the training of this demo a lot, but may be usefull in practice
+epochs = 3
+nn.set_learning_rate(0.01)
+nn.Train(training_epochs = epochs)
+#%% Plot the training progress and compare with actual data
+# TODO: visualize the MNIST data
+plt.plot(list(range(1, nn.epoch+1)), nn.history)
+plt.title('model accuracy')
+plt.ylabel('accuracy (%)')
 plt.xlabel('epoch')
 
-test_label = 999
+test_label = 996
 test = np.argmax(nn.Predict(i[test_label]))
-actual = np.argmax(nn.Predict(i[test_label]))
+actual = np.argmax(labels[test_label])
 if test == actual:
     print(f'Yay! The model predicted correctly: {test}')
 else:
-    print("Aw... The model predicted: {test}, but it was actually a {actual}")
+    print(f"Aw... The model predicted: {test}, but it was actually a {actual}")
 
