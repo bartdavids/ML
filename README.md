@@ -2,26 +2,40 @@
 
 I'm practicing machine learning application in Python and store some projects here.
 
-The data map stores practice data (MNIST only for now)
+The data map stores practice data. Mnist for the training of the heural network, and the wine quality dataset for the linear and logistic regression models. 
 
-# Projects (.py files)
+# Neural Network .py files
 
-NN
+NN.py
 - .py file where a simple neural network can be build, trained and run
 - for those that like to read top-down in python
 - ReLu/leaky ReLu blow out in matmul (@) when using GD (not when using adam)
 
-NN_as_class
+NN_as_class.py
 - .py file containing the neural network builder and trainer as a class
 - Example use in NN_as_class_input
 
-NN_as_class_input
+NN_as_class_input.py
 - Example use of the NN_as_class file
 
-# Known issues
+Known issues
 - ReLu/linear activation functions causes matmul to create inf's (and consequently NaNs)
 
-# Things I like to add
+Things I like to add
 - Better tracking of performace (metrics)
 - Different type of initization of weights
 - Test-train split the data
+
+# Regression
+
+Linear_regression.py
+- A file that stores a class for linear regression
+
+Logistic regression.py
+- Stores a class for logistic regression
+
+Regression.py
+- Examples useing the Linear and logistic regression classes
+- Uses the wine quality dataset
+- Compares linear and regression for similar problems
+- Compares adam with gradient descent to compare performance
