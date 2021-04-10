@@ -3,81 +3,560 @@
 Created by: bartdavids: https://github.com/bartdavids/ML/
 
 """
-from NN_class import NN
-
 import numpy as np
-import matplotlib.pyplot as plt
+import random
 
-#%% Get MNIST dataset
-with np.load("data/mnist.npz") as f:
-    i, labels = f["x_train"], f["y_train"]
-# i is the inpu data, l is the labels
+class Dense():
+    """
+    A dense "layer" object in a neural network to be used in the NN object.
+    Not in the traditional sense a layer, for it is the weigths between the layers and 
+    does not represent the neurons in the layers themselves
+    """
+    def __init__(self, inp_size, out_size, 
+                 activation = 'sigmoid',
+                 optimizer = 'gradient descent',
+                 weight_initializer = {'type' : 'random_normal', 
+                                       'mean': 0, 
+                                       'standard deviation' : 0.5}, 
+                 learning_rate = 0.01,
+                 beta1 = 0.8, beta2 = 0.999, eps = 1e-8):
+        """
+        Parameters
+        ----------
+        inp_size : int
+            the amount of neurons in the layer before.
+        out_size : int
+            the amount of the cells in this layer.
+        activation : string, optional
+            The type of activation function for this layer. 
+            The default is 'sigmoid'.
+            Other options include: 'tanh'. 
+            'relu' and 'leaky_relu' cause overflows in matmul
+        optimizer : string, optional
+            The type of optimizer. 
+            The default is 'gradient descent'.
+            Other options include: 'adam'.
+        weight_initializer: dict, optional
+            The dict needs to contain 3 items:
+                first a string whith the type of initialization
+                second the mean of the weights
+                third the range or standard deviation of the weights
+            The following methods use the third term as range:
+                'random_uniform'
+            The following methods use the third term as standard deviation:
+                'random_normal'
+            The types where the third term don't matter:
+                'zeros', 'ones', 'glorot', 'he'
+        learning_rate : float, optional
+            The learning rate of the neural network. The default is 0.01.
+        beta1 : float, optional
+            hyperparameter for the adam optimalisation method. 
+            The default is 0.8.
+        beta2 : float, optional
+            hyperparameter for the adam optimalisation method. 
+            The default is 0.999.
+        eps : float, optional
+            hyperparameter for the adam optimalisation method. 
+            The default is 1e-8.
 
-# scale to from 0 to 1
-i = i.astype("float64")
-i /= 255
+        Returns
+        -------
+        None.
 
-# for fun, to see if it mattered when the in put is 0 or 1 (one-hot), remove this block to compare
-# Spoiler alert: only slightly worse
-i[i<0.5] = 0 
-i[i>=0.5] = 1
+        """
+        if weight_initializer['type'].lower() in ['ones', 'zeros']:
+            weight_initializer, weight_mean, weight_deviation = weight_initializer['type'], None, None
+        elif weight_initializer['type'].lower() in ['he', 'glorot']:
+            weight_initializer, weight_mean, weight_deviation = weight_initializer['type'], weight_initializer['mean'], None
+        else:
+            weight_initializer, weight_mean, weight_deviation = weight_initializer['type'], weight_initializer['mean'], weight_initializer['standard deviation']
+        
+        self.weight_initializer = weight_initializer
+                
+        # Initialize weights and biases
+        if weight_initializer.lower() == 'random_normal':
+            self.w = np.random.normal(weight_mean, weight_deviation, (out_size, inp_size))
+        elif weight_initializer.lower() == 'random_uniform':
+            self.w = np.random.uniform(weight_mean-weight_deviation, weight_deviation, (out_size, inp_size))
+        elif weight_initializer.lower() == 'zeros':
+            self.w = np.zeros((out_size, inp_size))
+        elif weight_initializer.lower() == 'ones':
+            self.w = np.ones((out_size, inp_size))
+        elif weight_initializer.lower() == 'he': # Used with ReLu
+            self.w = np.random.normal(weight_mean, np.sqrt(2/inp_size), (out_size, inp_size))
+        elif weight_initializer.lower() == 'glorot': # Used with tanh, also xavier
+            self.w = np.random.normal(weight_mean, np.sqrt(1/inp_size), (out_size, inp_size))
+        
+        self.b = np.zeros((out_size, 1))
+        
+        # Inititalize hyper parameters
+        self.learning_rate = learning_rate
+        self.epoch = 0
+        
+        # set optimizer
+        if optimizer.lower() == 'gradient descent' or optimizer.lower() == 'gd':
+            self.optimizer = self.GradientDescent
+        elif optimizer.lower() == 'adam':
+            self.optimizer = self.Adam   
+            # Initialize momentii m1 and m2 for weights, 
+            # mb1, mb2 for the biases
+            self.m1 = np.zeros(self.w.shape)
+            self.m2 = np.zeros(self.w.shape)
+            self.bm1 = np.zeros(self.b.shape)
+            self.bm2 = np.zeros(self.b.shape)
+            
+            # set additional hyperparameters
+            self.beta1 = beta1
+            self.beta2 = beta2
+            self.eps = eps
+            
+        else:
+            raise(Exception(f'The optimizer {optimizer} is not available'))
+        
+        # set activation functions, and its derivative
+        if activation.lower() == 'sigmoid':
+            self.activation = self.sigmoid
+            self.derivative_activation = self.der_sigmoid
+        elif activation.lower() == 'tanh':
+            self.activation = self.tanh
+            self.derivative_activation = self.der_tanh
+        elif activation.lower() == 'relu':
+            self.activation = self.relu
+            self.derivative_activation = self.der_relu
+        elif activation.lower() == 'leaky_relu' or activation.lower() == 'lrelu':
+            self.activation = self.leaky_relu
+            self.derivative_activation = self.der_leaky_relu            
+        elif activation.lower() == 'linear':
+            self.activation = self.linear
+            self.derivative_activation = self.der_linear
+        else:
+            raise(Exception(f'The activation function {activation} is not available'))
+    
+    def sigmoid(self, r_pre):
+        # sigmoid activation function
+        return 1 / (1 + np.exp(-r_pre))
+    
+    def relu(self, r_pre):
+        # relu activation function
+        # causes matmul overflow when used
+        return np.max((np.zeros(r_pre.shape), r_pre), axis = 0)
+    
+    def leaky_relu(self, r_pre):
+        # relu activation function
+        # causes matmul overflow when used
+        r_pre[r_pre < 0] = r_pre[r_pre < 0]/100
+        return r_pre
+    
+    def linear(self, r_pre):
+        # lineair activation
+        return r_pre
+    
+    def der_linear(self, r):
+        # derivative of the lineair activation function
+        return np.ones(r.shape) # It think I can get away with just putting 1 here....
+    
+    def der_sigmoid(self, r_der):
+        # sigmoid activation function derivative for backprop
+        return (r_der * (1 - r_der))
+    
+    def der_relu(self, r):
+        # relu activation function derivative for backprop
+        der_r = r.copy()
+        der_r[der_r<=0] = 0
+        der_r[der_r>0] = 1
+        return der_r
+    
+    def der_leaky_relu(self, r):
+        # relu activation function derivative for backprop
+        der_r = r.copy()
+        der_r[der_r<=0] = 0.01
+        der_r[der_r>0] = 1
+        return der_r
+    
+    def tanh(self, r):
+        # Hyperbolic tangens activation function
+        tanh_r = r.copy()
+        tanh_r[r <= -100] = -1
+        tanh_r[r >= 100] = 1
+        calc_mask = (r > -100) & (r < 100)
+        tanh_r[calc_mask] = (np.exp(r[calc_mask]) - np.exp(-r[calc_mask]))/(np.exp(r[calc_mask]) + np.exp(-r[calc_mask]))
+        return tanh_r
+    
+    def der_tanh(self, r):
+        # Derivative of the tanh activation function
+        return 1 - np.power(r, 2)
+    
+    def set_learning_rate(self, learning_rate):
+        # function to adjust learning rate after training to continue
+        self.learning_rate = learning_rate
+    
+    def forward(self, inp):
+        # Activates input and returns output
+        self.inp = inp
+        self.out = self.activation(self.b + self.w @ self.inp)
+        return self.out
+    
+    def GradientDescent(self):
+        # Use the gradient of the error of the output to update weights and calculate the input gradient
+        # der_activation is the correction gradient after the activation part of this layer
+        self.der_activation = self.output_grad * self.derivative_activation(self.out)
+        
+        # The gradients for the update of the weights
+        delta_w = self.der_activation  @ np.transpose(self.inp, axes = [0,2,1])
+        delta_b = self.der_activation
+        
+        # Update the weights
+        self.w += -self.learning_rate * np.mean(delta_w, axis = 0)
+        self.b += -self.learning_rate * np.mean(delta_b, axis = 0)
+        
+        # Calculate the gradient for the next layer in the backprop
+        self.input_grad = self.w.T @ self.der_activation 
+        return self.input_grad
+    
+    def Adam(self):
+        # Use the gradient of the error of the output to update weights and calculate the input gradient
+        # der_activation is the correction gradient after the activation part of this layer
+        self.der_activation = self.output_grad * self.derivative_activation(self.out) 
+        
+        # update momentum
+        self.m1 = self.beta1 * self.m1 + (1.0 - self.beta1) * self.der_activation @ np.transpose(self.out, axes = [0,2,1]) 
+        self.m2 = self.beta2 * self.m2 + (1.0 - self.beta2) * (np.power(self.der_activation, 2) @ np.transpose(self.out, axes = [0,2,1])) 
+        self.bm1 = self.beta1 * self.bm1 + (1.0 - self.beta1) * self.der_activation
+        self.bm2 = self.beta2 * self.bm2 + (1.0 - self.beta2) * np.power(self.der_activation, 2)
+        
+        # Bias correction
+        m1hat = self.m1 / (1. - np.power(self.beta1, self.epoch + 1))
+        m2hat = self.m2 / (1. - np.power(self.beta2, self.epoch + 1))
+        bm1hat = self.bm1 / (1. - np.power(self.beta1, self.epoch + 1))
+        bm2hat = self.bm2 / (1. - np.power(self.beta2, self.epoch + 1))
+        m1hat = m1hat.sum(axis=0)
+        m2hat = m2hat.sum(axis=0)
+        bm1hat = bm1hat.sum(axis=0)
+        bm2hat = bm2hat.sum(axis=0)
+        
+        # The gradients for the update of the weights            
+        delta_w = m1hat/(np.sqrt(m2hat) + self.eps) 
+        delta_b = bm1hat/(np.sqrt(bm2hat) + self.eps)
+        
+        # Update the weights
+        self.w += -self.learning_rate * np.mean(delta_w, axis = 0)
+        self.b += -self.learning_rate * np.mean(delta_b, axis = 0)
+        
+        # Calculate the gradient for the next layer in the backprop
+        self.input_grad = self.w.T @ self.der_activation 
+        return self.input_grad
+    
+    def backward(self, output_grad):
+        # Takes the gradient of the output from this layer and uses it 
+        # to adjust the weights of this layer and return the input gradient errors
+        self.output_grad = output_grad
+        self.input_grad = self.optimizer()
+        self.epoch += 1
+        return self.input_grad
+    
+    def Predict(self, to_predict):
+        # Activates input and returns output
+        prediction_lay = self.activation(self.b + self.w @ to_predict)
+        return prediction_lay
+        
+class NN():
+    """
+    TODO: 
+        Better and more metrics
+        Test-train split the data
+    """
+    
+    def __init__(self, i, labels, 
+                 train_test_split = 0.,
+                 hidden = [], 
+                 batch_amount = 1, learning_rate = 0.01, 
+                 beta1 = 0.8, beta2 = 0.999, eps = 1e-8, # Hyperparameters for the Adam optimizer
+                 huber_delta = 1., # Hyperparameter for the huber loss function
+                 weight_initializer = {'type' : 'random_normal', 
+                                       'mean': 0, 
+                                       'standard deviation' : 0.5},  
+                 optimizer = 'gradient descent', activation = 'sigmoid', loss = 'mean squared error'):
+        """
+        Parameters
+        ----------
+        i : 3D numpy array
+            The input on which the model is trained on. The shape = (n, m, 1),
+            where n is the sample number, m is the amount of input parameters and 1
+            is because of maths
+        labels : 3D input array
+            The actual results on which the model is trained on. The shape = (n, m, 1),
+            where n is the sample number, m is the amount of ouput parameters and 1
+            is because of maths
+        train_test_split: float
+            The factor of the input being used to check the training with. This is not being used for training.
+        hidden : list of integers, optional
+            the number of neurons in ache layer. The default is [].
+            So [10, 10] means that there are going to be two layers with 10 neurons each
+        batch_amount : int, optional
+            Amount of batches. The default is 1.
+            It is not the batch size.
+        learning_rate : float, optional
+            The learning rate. The default is 0.01.
+        beta1 : float, optional
+            DESCRIPTION. The default is 0.8.
+        beta2 : float, optional
+            DESCRIPTION. The default is 0.999.
+        eps : float, optional
+            Hyperparameters for the Adam optimizer. The default is 1e-8.
+        huber_delta : TYPE, optional
+            Hyperparameter for the huber loss function. The default is 1.
+        weight_initializer: dict, optional
+            The list can contain 3 items:
+                'type' :  string
+                'mean' : float or int
+                'standard deviation' : float or int
+            The following methods use the third term as range:
+                'random_uniform'
+            The following methods use the third term as standard deviation:
+                'random_normal'
+            The types where the third term doesn't matter:
+                'zeros', 'ones', 'glorot', 'he'
+            The types where the second term doesn't matter:
+                'zeros', 'ones'
+        optimizer : string, optional
+            The type of algorithm for backpropagation. The default is 'gradient descent'.
+            Other options include: 'adam'
+        activation : string, optional
+            The type of activation function for this layer. 
+            The default is 'sigmoid'.
+            Other options include: 'tanh'. 
+            'relu' and 'leaky_relu' cause overflows in matmul
+        loss : string, optional
+            The loss function. The default is 'mean squared error'.
+            Other options include:
+                'mean square absolute error'
+                'logcosh'
+                'huber'
+                'mean squared logarithmic error' # can't figure out derivative
+                'binary cross entropy' # can't figure out derivative
+        Returns
+        -------
+        None.
 
-# The images are now in columns and rows (shape = 60000, 28, 28), just 1 vector is needed per image (shape = 60000, 784)
-# The shape of the data is cast in a n x m shape, where n is the amount of samples and m a vector of the data
-i = np.reshape(i, (i.shape[0], i.shape[1] * i.shape[2]))
+        """
+        list_of_initializers = ['ones', 'zeros', 'random_normal', 'random_uniform', 'he', 'glorot']
+        try: error = weight_initializer['type']
+        except: raise(Exception('The weight initializer must be a dictionary containing at least the variable \'type\''))
+        if isinstance(weight_initializer['type'], str):
+            if weight_initializer['type'].lower() not in list_of_initializers:             
+                raise(Exception(f'The weight initializer {error} is not an option. Try the following weight initializers: {list_of_initializers}'))
+            if weight_initializer['type'].lower() in ['he', 'glorot']:
+                if len(weight_initializer) < 2:
+                    raise(Exception(f'The weight initializer {error} requires at least two arguments, the type and the mean'))
+                try: _ = weight_initializer['mean']
+                except: raise(Exception(f'The weight initializer {error} requires at least an entry for the mean'))
+            if weight_initializer['type'].lower() == 'random_normal':
+                if len(weight_initializer) < 3:
+                    raise(Exception(f'The weight initializer {error} requires at least 3 arguments, the type, the mean and the standard deviation'))
+                try: _ = weight_initializer['mean']
+                except: raise(Exception(f'The weight initializer {error} requires at least 3 arguments, the type, the mean and the standard deviation'))
+                try: _ = weight_initializer['standard deviation']
+                except: raise(Exception(f'The weight initializer {error} requires at least 3 arguments, the type, the mean and the standard deviation'))
+            if weight_initializer['type'].lower() == 'random_uniform':
+                if len(weight_initializer) < 3:
+                    raise(Exception(f'The weight initializer {error} requires at least 3 arguments, the type, the mean and the standard deviation'))
+                try: _ = weight_initializer['mean']
+                except: raise(Exception(f'The weight initializer {error} requires at least 3 arguments, the type, the mean and the standard deviation'))
+                try: _ = weight_initializer['standard deviation']
+                except: raise(Exception(f'The weight initializer {error} requires at least 3 arguments, the type, the mean and the standard deviation'))
+            if len(weight_initializer) > 3:    
+                raise(Exception('weight_initializer got too many arguments: len(weight_initializer), expected 3 or less'))
+        else:
+            raise(Exception('The weight initializer (first argument) is not a string'))
+        # Some assignments to the NN object
+        self.i = i
+        
+        
+        sample_amount = self.i.shape[0] # The total amount of the input
+        sample_pool = list(range(sample_amount)) # The indices of each sample
+        test_amount = int(sample_amount * train_test_split) # The amount used for testing
+        
+        if train_test_split == 0 or test_amount == 0:
+            self.test_during_training = self.dont_test
+            self.train_i = self.i
+            self.train_labels = labels
+            self.test_i = None
+            self.test_labels = None
+        else:
+            train_amount = sample_amount - test_amount # The amount used for training
+            self.train_pool = random.sample(sample_pool, train_amount) # Randomly picked training samples
+            self.test_pool = np.array(sample_pool)[np.isin(sample_pool, self.train_pool, assume_unique = True, invert = True)] # Testing samples
+            self.train_i = self.i[self.train_pool]
+            self.test_i = self.i[self.test_pool]
+            self.train_labels = labels[self.train_pool]
+            self.test_labels = labels[self.test_pool]
+            self.test_during_training = self.do_test
+            
+        self.learning_rate = learning_rate
+        
+        # split the data into batches
+        self.batch_amount = min(batch_amount, self.train_i.shape[0])
+        self.batch_i = np.array_split(self.train_i, self.batch_amount)
+        self.batch_l = np.array_split(self.train_labels, self.batch_amount)
+        
+        # self.epoch will show the current epoch of the training,
+        # self.history the evolution of the evaluationg function 
+        # (only % of correct answers for now)
+        self.epoch = 0
+        self.train_history = []
+        self.test_history = []
+        
+        # neurons = n, where each entry is a layer, which value represents 
+        # the amount of neurons in that layer
+        self.n = [len(i[0])] + hidden + [len(labels[0])]
+        self.layers = [Dense(self.n[la], self.n[la + 1], 
+                             learning_rate = learning_rate, 
+                             beta1 = beta1, beta2 = beta2, eps = eps, 
+                             weight_initializer = weight_initializer,
+                             activation = activation)
+                       for la in range(len(self.n) - 2)]
+        
+        self.layers.append(Dense(self.n[-2], self.n[-1], 
+                                 learning_rate = learning_rate, 
+                                 beta1 = beta1, beta2 = beta2, eps = eps, 
+                                 activation = 'linear'))
+            
+        # set loss function and its derivative (der_loss)
+        if loss.lower() == 'mean squared error' or loss.lower() == 'mse':
+            self.loss = self.mse
+            self.der_loss = self.der_mse            
+        elif loss.lower() == 'mean absolute error' or loss.lower() == 'mae':
+            self.loss = self.mae
+            self.der_loss = self.der_mae
+        elif loss.lower() == 'huber':
+            self.huber_delta = huber_delta
+            self.loss = self.huber
+            self.der_loss = self.der_huber
+        elif loss.lower() == 'logcosh':
+            self.loss = self.logcosh
+            self.der_loss = self.der_logcosh
+        else:
+            raise(Exception(f'The loss function {loss} is not available'))
+    
+    def history(self):
+        return {'train' : self.train_history, 'test' : self.test_history}
+    
+    def set_learning_rate(self, learning_rate):
+        # function to adjust learning rate after training to continue
+        self.learning_rate = learning_rate
+        for layer in self.layers:
+            layer.set_learning_rate(learning_rate)
+    
+    def do_test(self):
+        # Predict test and accuracy
+        test_result = self.Predict(self.test_i)
+        test_acc = round(np.sum(np.equal(np.argmax(test_result, axis = 1), np.argmax(self.test_labels, axis = 1)))/self.test_i.shape[0]*100,2)
+        self.test_history.append(test_acc)
+        return str(f': Test accuracy = {test_acc}%') 
+    
+    def dont_test(self):
+        self.test_history.append(0)
+        return ""
+    
+    # Cost functions and their derivatives
+    def mse(self, y, r):
+        # mean squared error loss function
+        return 1 / (2 * len(r)) * np.sum((y - r) ** 2, axis=0)
+    
+    def der_mse(self, y, r):
+        # derivative of the mean squared error function for backprop
+        return y - r
+        
+    def mae(self, y, r):
+        # mean absolute error loss function
+        return 1 / (len(r)) * np.sum(abs(y - r) , axis=0)
+    
+    def der_mae(self, y, r):
+        # derivative of the mean absolute error function for backprop
+        e = y-r
+        e[e<0] = -1
+        e[e>0] = 1
+        return e
+    
+    def msle(self, y, r):
+        # Mean squared logarithmic error
+        # Can't figure out derivative
+        return 1 / (len(r)) * np.sum(np.log(y + 1) - np.log(r + 1) ** 2, axis=0)
+    
+    def binary_crossentropy(self, y, r):
+        # Binary cross entropy loss function
+        # Can't figure out derivative
+        return -1 / (len(r)) * np.sum(y*np.log10(r) - (1 - y)*np.log10(1 - r) ** 2, axis=0)
+    
+    def der_binary_crossentropy(self, y, r):
+        # Derivative of the binary cross entropy loss function
+        # I think?
+        return -1*(y/r - (1 - y)/(1 - r))
+    
+    def huber(self, y, r):
+        # huber loss function, tweek it using the huber_delta variable
+        # where the value is smaller then the huber_delta hyperparameter, solve quadtratic, else linear
+        loss = np.where(np.abs(y-r) < self.huber_delta , 0.5*((y-r)**2), 
+                        self.huber_delta*np.abs(y - r) - 0.5*(self.huber_delta**2))
+        return 1 / (len(r)) * np.sum(loss, axis = 0)
+    
+    def der_huber(self, y, r):
+        e = y - r
+        #e[abs(e) < self.huber_delta] = e #derivative of the mse
+        e[abs(e) >= self.huber_delta] = self.huber_delta*r[abs(e) >= self.huber_delta]/abs(r[abs(e) >= self.huber_delta] - y[abs(e) >= self.huber_delta])
+        return e
+        
+    # log cosh loss
+    def logcosh(self, y, r):
+        loss = np.log(np.cosh(r - y))
+        return 1 / (len(r)) * np.sum(loss, axis = 0)
+    
+    def der_logcosh(self, y, r):
+        # Hey dit is tanh
+        return ((np.exp(y-r) - np.exp(-(y-r)))/(np.exp(y-r) + np.exp(-(y-r))))
+    
+    def Train(self, training_epochs):
+        """
+        Train the model
 
-i.shape += (1,) 
-# now the input (i) is a 3D numpy array with the shape (n, m, 1) where n is the amount of samples,
-# m is the amount of parameters and the 1 makes the vectors an m x 1 matrix, which is needed during training
+        Returns
+        -------
+        None, it adjusts the weights of the NN object
 
-# Convert labels to categrories containing 10 0 or 1 (one-hot) categories for the options of numbers
-labels = np.eye(10)[labels]
-labels.shape += (1,)
-# now the output (i) is a 3D numpy array with the shape (n, m, 1) where n is the amount of samples,
-# m is the amount of categories and the 1 makes the vectors an m x 1 matrix, which is needed during training
-
-
-#%% Initiate the neural network
-# Hidden layers in list: every number is the amnount neurons in that layer. 
-# So [25, 20] means that there are going to be two hidden layers with the first containing 25 neurons, and the second 20
-hidden = [25, 20]
-
-learning_rate = 0.05 # the learning rate
-
-# the amount of batches, not the batch size: 
-# 1 is batch mode, where batch_amount == sample size its stochastic 
-# and anywhere in between is mini-batch
-batch_amount = 60000 # stochastich in example because of better training 
-
-nn = NN(i, labels,
-        hidden = hidden,
-        batch_amount = batch_amount, 
-        learning_rate = learning_rate,
-        optimizer = 'adam',          # available: adam, gradient descent
-        activation = 'sigmoid',      #available: sigmoid, tanh (relu and leaky relu cause overflow in matmul)
-        loss = 'mean squared error') #available: means squared error, mean absolute error, logcosh and huber
-
-#%% Initial training
-epochs = 10
-nn.Train(training_epochs = epochs)
-
-#%% Some more training
-# This is not actually going to improve the training of this demo a lot, but may be usefull in practice
-epochs = 3
-nn.set_learning_rate(0.01)
-nn.Train(training_epochs = epochs)
-#%% Plot the training progress and compare with actual data
-# TODO: visualize the MNIST data
-plt.plot(list(range(1, nn.epoch+1)), nn.history)
-plt.title('model accuracy')
-plt.ylabel('accuracy (%)')
-plt.xlabel('epoch')
-
-test_label = 996
-test = np.argmax(nn.Predict(i[test_label]))
-actual = np.argmax(labels[test_label])
-if test == actual:
-    print(f'Yay! The model predicted correctly: {test}')
-else:
-    print(f"Aw... The model predicted: {test}, but it was actually a {actual}")
-
+        """
+        for _epoch in range(training_epochs):
+            correct = 0
+            for batch in range(self.batch_amount): 
+                
+                # Forward propagation
+                output = self.batch_i[batch]
+                for layer in self.layers:
+                    output = layer.forward(output)
+                # Ouput is now the output of the model
+                self.output = output
+                # Accumulate amount of correct results
+                correct += np.sum(np.equal(np.argmax(output, axis = 1), np.argmax(self.batch_l[batch], axis = 1)))    
+                
+                # Backpropagation
+                # gradient_error is the derivative of the loss function
+                gradient_error = self.der_loss(output, self.batch_l[batch])
+                
+                for layer in reversed(self.layers):
+                    gradient_error = layer.backward(gradient_error)
+                    
+            # Show accuracy for this epoch
+            # percentage correct:
+            train_acc = round((correct / self.train_i.shape[0]) * 100, 2)
+            self.train_history.append(train_acc)
+            self.epoch += 1
+            
+            # Predict test and accuracy
+            test_text = self.test_during_training()
+            
+            print(f"Epoch {self.epoch}: Train accuracy = {train_acc}%{test_text}")     
+    
+    def Predict(self, to_predict):
+        for layer in self.layers:
+            to_predict = layer.Predict(to_predict)
+        return to_predict
+        
