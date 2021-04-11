@@ -15,7 +15,7 @@ class Dense():
     def __init__(self, inp_size, out_size, 
                  activation = 'sigmoid',
                  optimizer = 'gradient descent',
-                 weight_initializer = {'type' : 'random_normal', 
+                 weight_initializer = {'type' : 'random normal', 
                                        'mean': 0, 
                                        'standard deviation' : 0.5}, 
                  learning_rate = 0.01,
@@ -74,9 +74,9 @@ class Dense():
         self.weight_initializer = weight_initializer
                 
         # Initialize weights and biases
-        if weight_initializer.lower() == 'random_normal':
+        if weight_initializer.lower() == 'random normal':
             self.w = np.random.normal(weight_mean, weight_deviation, (out_size, inp_size))
-        elif weight_initializer.lower() == 'random_uniform':
+        elif weight_initializer.lower() == 'random uniform':
             self.w = np.random.uniform(weight_mean-weight_deviation, weight_deviation, (out_size, inp_size))
         elif weight_initializer.lower() == 'zeros':
             self.w = np.zeros((out_size, inp_size))
@@ -86,6 +86,7 @@ class Dense():
             self.w = np.random.normal(weight_mean, np.sqrt(2/inp_size), (out_size, inp_size))
         elif weight_initializer.lower() == 'glorot': # Used with tanh, also xavier
             self.w = np.random.normal(weight_mean, np.sqrt(1/inp_size), (out_size, inp_size))
+        else: raise(Exception(f'The weight initializer {weight_initializer} is not available'))
         
         self.b = np.zeros((out_size, 1))
         
@@ -123,7 +124,7 @@ class Dense():
         elif activation.lower() == 'relu':
             self.activation = self.relu
             self.derivative_activation = self.der_relu
-        elif activation.lower() == 'leaky_relu' or activation.lower() == 'lrelu':
+        elif activation.lower() == 'leaky relu' or activation.lower() == 'lrelu':
             self.activation = self.leaky_relu
             self.derivative_activation = self.der_leaky_relu            
         elif activation.lower() == 'linear':
@@ -134,7 +135,12 @@ class Dense():
     
     def sigmoid(self, r_pre):
         # sigmoid activation function
-        return 1 / (1 + np.exp(-r_pre))
+        sig_r = r_pre.copy()
+        sig_r[r_pre <= -100] = 0
+        sig_r[r_pre >= 100] = 1
+        calc_mask = (r_pre > -100) & (r_pre < 100)
+        sig_r[calc_mask] = 1 / (1 + np.exp(-r_pre[calc_mask]))
+        return sig_r
     
     def relu(self, r_pre):
         # relu activation function
@@ -169,7 +175,7 @@ class Dense():
     def der_leaky_relu(self, r):
         # relu activation function derivative for backprop
         der_r = r.copy()
-        der_r[der_r<=0] = 0.01
+        der_r[der_r<=0] = 0.01 * der_r[der_r<=0]
         der_r[der_r>0] = 1
         return der_r
     
@@ -193,7 +199,18 @@ class Dense():
     def forward(self, inp):
         # Activates input and returns output
         self.inp = inp
+        
+        inp_shape = list(range(len(self.inp.shape)))
+        inp_T_shape = inp_shape.copy()
+        inp_T_shape[-1], inp_T_shape[-2] = inp_T_shape[-2], inp_T_shape[-1]
+        self.inp_T_shape = inp_T_shape
+        
         self.out = self.activation(self.b + self.w @ self.inp)
+        
+        out_shape = list(range(len(self.out.shape)))
+        out_T_shape = out_shape.copy()
+        out_T_shape[-1], out_T_shape[-2] = out_T_shape[-2], out_T_shape[-1]
+        self.out_T_shape = out_T_shape
         return self.out
     
     def GradientDescent(self):
@@ -202,7 +219,8 @@ class Dense():
         self.der_activation = self.output_grad * self.derivative_activation(self.out)
         
         # The gradients for the update of the weights
-        delta_w = self.der_activation  @ np.transpose(self.inp, axes = [0,2,1])
+        
+        delta_w = self.der_activation  @ np.transpose(self.inp, axes = self.inp_T_shape)
         delta_b = self.der_activation
         
         # Update the weights
@@ -219,8 +237,8 @@ class Dense():
         self.der_activation = self.output_grad * self.derivative_activation(self.out) 
         
         # update momentum
-        self.m1 = self.beta1 * self.m1 + (1.0 - self.beta1) * self.der_activation @ np.transpose(self.out, axes = [0,2,1]) 
-        self.m2 = self.beta2 * self.m2 + (1.0 - self.beta2) * (np.power(self.der_activation, 2) @ np.transpose(self.out, axes = [0,2,1])) 
+        self.m1 = self.beta1 * self.m1 + (1.0 - self.beta1) * self.der_activation @ np.transpose(self.inp, axes = self.inp_T_shape) 
+        self.m2 = self.beta2 * self.m2 + (1.0 - self.beta2) * (np.power(self.der_activation, 2) @ np.transpose(self.inp, axes = self.inp_T_shape)) 
         self.bm1 = self.beta1 * self.bm1 + (1.0 - self.beta1) * self.der_activation
         self.bm2 = self.beta2 * self.bm2 + (1.0 - self.beta2) * np.power(self.der_activation, 2)
         
@@ -229,10 +247,10 @@ class Dense():
         m2hat = self.m2 / (1. - np.power(self.beta2, self.epoch + 1))
         bm1hat = self.bm1 / (1. - np.power(self.beta1, self.epoch + 1))
         bm2hat = self.bm2 / (1. - np.power(self.beta2, self.epoch + 1))
-        m1hat = m1hat.sum(axis=0)
-        m2hat = m2hat.sum(axis=0)
-        bm1hat = bm1hat.sum(axis=0)
-        bm2hat = bm2hat.sum(axis=0)
+        #m1hat = m1hat.sum(axis=0)
+        #m2hat = m2hat.sum(axis=0)
+        #bm1hat = bm1hat.sum(axis=0)
+        #bm2hat = bm2hat.sum(axis=0)
         
         # The gradients for the update of the weights            
         delta_w = m1hat/(np.sqrt(m2hat) + self.eps) 
@@ -272,7 +290,7 @@ class NN():
                  batch_amount = 1, learning_rate = 0.01, 
                  beta1 = 0.8, beta2 = 0.999, eps = 1e-8, # Hyperparameters for the Adam optimizer
                  huber_delta = 1., # Hyperparameter for the huber loss function
-                 weight_initializer = {'type' : 'random_normal', 
+                 weight_initializer = {'type' : 'random normal', 
                                        'mean': 0, 
                                        'standard deviation' : 0.5},  
                  optimizer = 'gradient descent', activation = 'sigmoid', loss = 'mean squared error'):
@@ -413,13 +431,14 @@ class NN():
                              learning_rate = learning_rate, 
                              beta1 = beta1, beta2 = beta2, eps = eps, 
                              weight_initializer = weight_initializer,
-                             activation = activation)
+                             activation = activation, optimizer = optimizer)
                        for la in range(len(self.n) - 2)]
         
         self.layers.append(Dense(self.n[-2], self.n[-1], 
                                  learning_rate = learning_rate, 
-                                 beta1 = beta1, beta2 = beta2, eps = eps, 
-                                 activation = 'linear'))
+                                 beta1 = beta1, beta2 = beta2, eps = eps,
+                                 weight_initializer = weight_initializer,
+                                 activation = 'linear', optimizer = optimizer))
             
         # set loss function and its derivative (der_loss)
         if loss.lower() == 'mean squared error' or loss.lower() == 'mse':
