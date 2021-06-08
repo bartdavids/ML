@@ -21,8 +21,6 @@ Known issues
 
 Things I like to add
 - Better tracking of performace (metrics)
-- Different type of initization of weights
-- Test-train split the data
 
 # Regression
 
