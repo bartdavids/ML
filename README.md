@@ -9,7 +9,6 @@ The data map stores practice data. Mnist for the training of the heural network,
 NN.py
 - .py file where a simple neural network can be build, trained and run
 - for those that like to read top-down in python
-- ReLu/leaky ReLu blow out in matmul (@) when using GD (not when using adam)
 
 NN_as_class.py
 - .py file containing the neural network builder and trainer as a class
@@ -19,7 +18,6 @@ NN_as_class_input.py
 - Example use of the NN_as_class file
 
 Known issues
-- ReLu/linear activation functions causes matmul to create inf's (and consequently NaNs)
 
 Things I like to add
 - Better tracking of performace (metrics)
