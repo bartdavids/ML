@@ -2,7 +2,7 @@
 
 I'm practicing machine learning application in Python and store some projects here.
 
-The data map stores practice data. Mnist for the training of the heural network, and the wine quality dataset for the linear and logistic regression models. 
+The data map stores practice data. MNIST for the training of the neural network, and the wine quality dataset for the linear and logistic regression models. 
 
 # Neural Network .py files
 
@@ -31,7 +31,7 @@ Logistic regression.py
 - Stores a class for logistic regression
 
 Regression.py
-- Examples useing the Linear and logistic regression classes
+- Examples using the Linear and Logistic regression classes
 - Uses the wine quality dataset
 - Compares linear and regression for similar problems
 - Compares adam with gradient descent to compare performance
