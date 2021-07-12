@@ -17,8 +17,6 @@ NN_as_class.py
 NN_as_class_input.py
 - Example use of the NN_as_class file
 
-Known issues
-
 Things I like to add
 - Better tracking of performace (metrics)
 
@@ -33,5 +31,5 @@ Logistic regression.py
 Regression.py
 - Examples using the Linear and Logistic regression classes
 - Uses the wine quality dataset
-- Compares linear and regression for similar problems
+- Compares linear and logistic regression for similar problems
 - Compares adam with gradient descent to compare performance
