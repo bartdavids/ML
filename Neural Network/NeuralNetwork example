@@ -38,7 +38,7 @@ labels.shape += (1,)
 
 
 #%% Initiate the neural network
-# Hidden layers in list: every number is the amnount neurons in that layer. 
+# Hidden layers in list: every number is the amount neurons in that layer. 
 # So [25, 20] means that there are going to be two hidden layers with the first containing 25 neurons, and the second 20
 hidden = [25, 20]
 
@@ -58,14 +58,14 @@ nn = NN(i, labels,
                               'mean': 0,                   # Necessary for: random_uniform, random_normal, glorot, he, zeros, ones
                               'standard deviation' : 0.5}, # Necessary for: random_uniform, random_normal
         optimizer = 'adam',          # Available: adam, gradient descent
-        activation = 'sigmoid',      # Available: sigmoid, tanh (relu and leaky relu cause overflow in matmul)
+        activation = 'sigmoid',      # Available: sigmoid, tanh (relu and leaky relu are available, but with too high a learning rate can cause overflow in matmul)
         loss = 'mean squared error') # Available: means squared error, mean absolute error, logcosh and huber
 
 #%% Initial training
 epochs = 5
 nn.Train(training_epochs = epochs)
 
-#%% Some more training
+#%% Some more training with lower learning rate
 # This is not actually going to improve the training of this demo a lot, but may be usefull in practice
 epochs = 5
 nn.set_learning_rate(0.005)
